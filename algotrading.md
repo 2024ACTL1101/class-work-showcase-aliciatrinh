@@ -70,16 +70,59 @@ previous_price <- 0
 share_size <- 100
 accumulated_shares <- 0
 
-for (i in 1:nrow(amd_df)) {
-# Fill your code here
+# Set up the first condition (if previous price = 0)
+if (previous_price==0) {
+    amd_df$trade_type[1] <- "buy" # setting the trade_type
+    amd_df$costs_proceeds[1] <- amd_df[1,2] * -share_size 
+    # setting the cost_proceeds, ensuring the result is negative
+    accumulated_shares <- accumulated_shares + share_size 
+    # redefining accumulated_shares
+    amd_df$accumulated_shares[1] <- accumulated_shares 
+    # assigning 100 shares to accumulated_shares
+}else { # If you do not buy, there are 0 costs_proceeds and 0 accumulated shares
+  amd_df$trade_type[1] <- ""
+  amd_df$costs_proceeds[1] <- 0
+  amd_df$accumulated_shares[1] <- 0
 }
+
+# Set up the second condition (if the price of the current day is less than that of the previous day)
+
+# This part of the code follows similarly to the previous part of the code under the first condition
+for (i in 2:(nrow(amd_df)-1)) {
+  if (amd_df$close[i] < amd_df$close[i-1]) {
+    amd_df$trade_type[i] <- "buy"
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+    accumulated_shares <- accumulated_shares + share_size
+    amd_df$accumulated_shares[i] <- accumulated_shares
+  }else {
+  amd_df$trade_type[i] <- ""
+  amd_df$costs_proceeds[i] <- 0
+  amd_df$accumulated_shares[i] <- accumulated_shares
+  }
+}
+
+# On the last day of trading
+amd_df$trade_type[nrow(amd_df)] <- "sell"
+amd_df$costs_proceeds[nrow(amd_df)] <- amd_df$close[nrow(amd_df)] * amd_df$accumulated_shares[nrow(amd_df)-1] 
+# calculating the total costs_proceed by multiplying the share price with the total accumulated shares
+# when selling shares, costs_proceeds will now be positive 
+# buying shares warrants a negative value, selling shares warrants a positive value
+amd_df$accumulated_shares[nrow(amd_df)] <- 0 
+# selling all shares means there are 0 accumulated shares
 ```
 
 
 ### Step 3: Customize Trading Period
 - Define a trading period you wanted in the past five years 
 ```r
-# Fill your code here
+# The trading period will be defined as 2023-05-17 to 2024-05-17.
+
+start_date <- "2023-05-17"
+end_date <- "2024-05-17"
+start_period <- which(amd_df$date == start_date)
+end_period <- which(amd_df$date == end_date)
+amd_df <- amd_df[c(start_period:end_period), ] 
+# redefining amd_df for the trading period
 ```
 
 
@@ -91,7 +134,31 @@ After running your algorithm, check if the trades were executed as expected. Cal
 - ROI Formula: $$\text{ROI} = \left( \frac{\text{Total Profit or Loss}}{\text{Total Capital Invested}} \right) \times 100$$
 
 ```r
-# Fill your code here
+# Before commencing Step 4, please ensure you have run the code in the following order: Step 1, Step 2, Step 3, Step 2 to calculate the correct results for the first strategy.
+
+# If you have run Step 5, just run Step 4 to calculate the correct results for the profit-taking strategy.
+
+# Total Profit/Loss calculation
+total_profit_or_loss <- sum(amd_df$costs_proceeds)
+print(total_profit_or_loss) # to show the value in console
+
+# Invested capital
+invested_capital <- 0 
+# initialising invested capital as 0
+
+for (i in 1:nrow(amd_df)) {
+  if (amd_df$trade_type[i] == "buy") {
+    invested_capital <- invested_capital - amd_df$costs_proceeds[i] 
+    # taking the negative sum by substracting costs_proceeds from invested_capital
+  }else {
+    invested_capital <- invested_capital
+  }
+}
+print(invested_capital)
+
+#ROI calculation
+ROI <- (total_profit_or_loss/invested_capital) * 100
+print(ROI)
 ```
 
 ### Step 5: Profit-Taking Strategy or Stop-Loss Mechanisum (Choose 1)
@@ -100,7 +167,52 @@ After running your algorithm, check if the trades were executed as expected. Cal
 
 
 ```r
-# Fill your code here
+# Profit-taking strategy
+
+# Before commencing Step 5, please ensure you have run the code in the following steps: 
+# Step 1, Step 2, Step 3, Step 2
+
+# Selling half of the shares when the price increases by 20% above of the average purchase price
+for (i in 2:(nrow(amd_df)-1)) {
+  if(amd_df$close[i] > mean(amd_df$close[1]:amd_df$close[i-1]) * 1.2) {
+    amd_df$trade_type[i] <- "sell"
+    amd_df$accumulated_shares[i] <- amd_df$accumulated_shares[i-1] * 0.5 # selling half of the shares
+    if (amd_df$trade_type[i+1] == "buy") {
+      amd_df$accumulated_shares[i+1] <- amd_df$accumulated_shares[i] + share_size
+    }else {
+      amd_df$accumulated_shares[i+1] <- amd_df$accumulated_shares[i]
+    }
+  }else { # when the price of the current day is below the price of the previous day
+    if (amd_df$close[i] < amd_df$close[i-1]) {
+      amd_df$trade_type[i] <- "buy"
+      amd_df$accumulated_shares[i] <- amd_df$accumulated_shares[i-1] + share_size
+    }else {
+      amd_df$trade_type[i]<-""
+      amd_df$accumulated_shares[i] <- amd_df$accumulated_shares[i-1]
+    }
+  }
+}
+
+for (i in 1:(nrow(amd_df)-1)) {
+  if (amd_df$trade_type[i] == "buy") {
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+  }else {
+    if (amd_df$trade_type[i] == "sell") {
+      amd_df$costs_proceeds[i] <- amd_df$close[i] * (amd_df$accumulated_shares[i-1] - amd_df$accumulated_shares[i]) 
+      # when selling shares, costs_proceeds will now be positive 
+      # buying shares warrants a negative value, selling shares warrants a positive value
+    }else {
+      amd_df$costs_proceeds[i] <- 0
+    }
+  }
+}
+
+# On the last day of trading, as done before with the previous strategy 
+amd_df$trade_type[nrow(amd_df)] <- "sell"
+amd_df$costs_proceeds[nrow(amd_df)] <- amd_df$close[nrow(amd_df)] * amd_df$accumulated_shares[nrow(amd_df)-1] 
+# when selling shares, costs_proceeds will now be positive 
+# buying shares warrants a negative value, selling shares warrants a positive value
+amd_df$accumulated_shares[nrow(amd_df)] <- 0
 ```
 
 
@@ -110,7 +222,13 @@ After running your algorithm, check if the trades were executed as expected. Cal
 
 
 ```r
-# Fill your code here and Disucss
+# To calculate the P/L and ROI following the profit-taking strategy, please run Step 4 after running Step 5.
+
+# From 2023-05-17 to 2024-05-17: Before the profit-taking strategy, the P/L and ROI was $377,010 and 22.9% (1dp) respectively. After the Profit-taking strategy, the P/L and ROI was $326,709.90 and 29.8% (1dp) respectively. Therefore, the P/L did not improve and the ROI did improve over the chosen period. 
+
+# 2023: The share prices fluctuated in the $90-120 range, resulting in only shares being bought as the share price never soared above 120% of the average purchase price. 
+
+# 2024: The share price was on a steady incline, increasing above $120 to reach $211.383 on 2024-03-07 before gradually plummeting down to the $150-160 range in May. The initial surge in share price derived from investors' increased interest in artificial intelligence (AI) development, resulting in further investment into AMD's AI chips. The later decline in share price reflected investors' disappointment in AMD for failing to meet their forecast of $4 billion in AI chip sales. Nonetheless, thanks to the initial incline, 2024-01-08 was when the profit-taking strategy initiated as a result of the soaring share prices. Therefore, through the profit-taking strategy, the ROI increased by 6.9% as we took advantage of high share prices to sell our shares at a greater profit as opposed to our first strategy. Despite the higher ROI, P/L was still lower by $50,300.10 likely due to the first strategy taking advantage of the generally higher share price on 2024-05-17, selling the accumulated shares for a greater profit. However, using the profit-taking strategy, I believe that extending the trading period beyond 2024-05-17 will yield a higher P/L than $337,010 due to the greater observed ROI of 29.8%. 
 ```
 
 Sample Discussion: On Wednesday, December 6, 2023, AMD CEO Lisa Su discussed a new graphics processor designed for AI servers, with Microsoft and Meta as committed users. The rise in AMD shares on the following Thursday suggests that investors believe in the chipmaker's upward potential and market expectations; My first strategy earned X dollars more than second strategy on this day, therefore providing a better ROI.
