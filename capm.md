@@ -81,7 +81,15 @@ $$
 $$
 
 ```r
-#fill the code
+# Initialise the columns for daily returns in df
+df$AMD_dailyreturns <- NA
+df$GSPC_dailyreturns <- NA
+
+# Calculate the respective daily returns following the given formula
+for (i in 2:(nrow(df))) {
+  df$AMD_dailyreturns[i] <- (df$AMD[i] - df$AMD[i-1])/df$AMD[i-1]
+  df$GSPC_dailyreturns[i] <- (df$GSPC[i] - df$GSPC[i-1])/df$GSPC[i-1]
+}
 ```
 
 - **Calculate Risk-Free Rate**: Calculate the daily risk-free rate by conversion of annual risk-free Rate. This conversion accounts for the compounding effect over the days of the year and is calculated using the formula:
@@ -91,21 +99,42 @@ $$
 $$
 
 ```r
-#fill the code
+# Initialise the column for daily risk-free rates in df
+df$daily_riskfreerate <- NA
+
+# Calculate the daily risk-free rates following the given formula
+df$daily_riskfreerate[1] <- (1 + df$RF[1]/100)^(1/360) - 1
+for (i in 2:(nrow(df))) {
+  df$daily_riskfreerate[i] <- (1 + df$RF[i]/100)^(1/360) - 1
+}
 ```
 
 
 - **Calculate Excess Returns**: Compute the excess returns for AMD and the S&P 500 by subtracting the daily risk-free rate from their respective returns.
 
 ```r
-#fill the code
+# Initialise the columns for excess returns in df
+df$AMD_excessreturns <- NA
+df$GSPC_excessreturns <- NA
+
+# Calculate the respective excess returns by following the instructions
+for (i in 2:(nrow(df))) {
+  df$AMD_excessreturns[i] <- df$AMD_dailyreturns[i] - df$daily_riskfreerate[i]
+  df$GSPC_excessreturns[i] <- df$GSPC_dailyreturns[i] - df$daily_riskfreerate[i]
+}
 ```
 
 
 - **Perform Regression Analysis**: Using linear regression, we estimate the beta (\(\beta\)) of AMD relative to the S&P 500. Here, the dependent variable is the excess return of AMD, and the independent variable is the excess return of the S&P 500. Beta measures the sensitivity of the stock's returns to fluctuations in the market.
 
 ```r
-#fill the code
+# Perform linear regression analysis
+Model <- lm(AMD_excessreturns~GSPC_excessreturns,data=df)
+summary(Model)
+
+# Set beta as the slope of the CAPM regression line
+beta <- summary(Model)$coefficient[2,1]
+print(beta)
 ```
 
 
@@ -114,13 +143,18 @@ $$
 What is your \(\beta\)? Is AMD more volatile or less volatile than the market?
 
 **Answer:**
-
+The beta, according to the summary, is 1.57 to two decimal places. Because beta > 1, AMD has more systematic risk than the overall market, therefore AMD is more volatile than the market. This implies higher investment risk. Additionally, with higher systematic risk comes greater potential returns for investing in AMD.
 
 #### Plotting the CAPM Line
 Plot the scatter plot of AMD vs. S&P 500 excess returns and add the CAPM regression line.
 
 ```r
-#fill the code
+# Plot GSPC excess returns against AMD excess returns
+plot <- ggplot(df,aes(x=GSPC_excesreturns,y=AMD_excessreturns)) +
+  geom_point() + # Plots the scatterplot
+  geom_smooth(method='lm',col="red") # PLots the CAPM regression line
+  labs(title = "Excess returns")
+plot
 ```
 
 ### Step 3: Predictions Interval
@@ -129,7 +163,51 @@ Suppose the current risk-free rate is 5.0%, and the annual expected return for t
 
 
 **Answer:**
+The 90% prediction interval is (-50%,86%).
 
 ```r
-#fill the code
+# Intialise variables
+GSPC_annualexpectedreturn <- 0.133
+Current_riskfreerate <- 0.05
+beta <- summary(Model)$coefficient[2,1]
+
+# Calculate the number of observations
+n <- length(df$GSPC_dailyreturns)
+
+# Calculate the forecasted value 
+X_f <- GSPC_annualexpectedreturn/252 - Current_riskfreerate
+
+# Calculate the mean of GSPC excess returns
+mean_GSPCexcessreturns <- mean(as.numeric(df$GSPC_excessreturns), na.rm=TRUE)
+
+# Calculate the standard error
+se <- sqrt(sum(residuals(Model)^2)/(n-1-1))
+
+# Calculate the Sum of Squares of GSPC excess returns
+SSX <- sum((as.numeric(df$GSPC_excessreturns) - mean_GSPCexcessreturns)^2, 
+           na.rm=TRUE)
+
+# Calculate the daily standard error of forecast
+daily_sf <- se * sqrt(1 + 1/n + (X_f - mean_GSPCexcessreturns)^2/SSX)
+
+# Calculate the annual standard error following the hint
+annual_se <- daily_sf * sqrt(252)
+
+# Calculate the annual standard error of forecast
+annual_sf <- annual_se * sqrt(1 + 1/n + (X_f - mean_GSPCexcessreturns)^2/SSX)
+
+# Set the significance level to produce a 90% prediction interval, two-sided
+alpha <- 0.10
+
+# Set the t-value
+t_value <- qt(1 - alpha/2,df=n-2)
+
+# Calculate the estimated annual AMD returns
+Estimated_annualAMDreturns <- Current_riskfreerate + beta * 
+  (GSPC_annualexpectedreturn - Current_riskfreerate)
+
+# Produce the 90$ prediction interval, two-sided
+lower_bound <- Estimated_annualAMDreturns - t_value * annual_sf
+upper_bound <- Estimated_annualAMDreturns + t_value * annual_sf
+cat(round(lower_bound, 2), round(upper_bound, 2))
 ```
